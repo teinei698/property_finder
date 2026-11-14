@@ -65,6 +65,21 @@
   .empty { text-align:center; color:var(--mute); padding:40px 20px; }
   .entry { background:#111827; color:#fff; border-radius:12px; padding:10px 12px; margin:10px 12px; font-size:13px; }
   .entry b { color:#fff; }
+
+  .scout { margin:10px 12px; background:#fff; border:1px solid var(--line); border-radius:14px; padding:12px; }
+  .scout h3 { margin:0 0 4px; font-size:16px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 2px; }
+  .opt { border:1px solid #d1d5db; background:#fff; border-radius:18px; padding:7px 12px; font-size:14px; cursor:pointer; }
+  .opt.sel { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .opt.go { background:var(--red); color:#fff; border-color:var(--red); font-weight:600; }
+  .say { background:var(--okbg); border-radius:12px 12px 12px 4px; padding:8px 10px; margin:8px 0 4px; font-size:14px; max-width:92%; }
+  .you { background:#eef2ff; border-radius:12px 12px 4px 12px; padding:6px 10px; margin:4px 0 4px auto; font-size:14px; width:fit-content; max-width:85%; }
+  .log { font-size:13px; color:#374151; margin:2px 0; }
+  .fit { display:inline-block; font-size:12px; border-radius:8px; padding:2px 7px; margin:4px 4px 0 0; background:#f3f4f6; }
+  .fit.y { background:var(--okbg); color:var(--ok); } .fit.n { background:var(--warnbg); color:var(--warn); }
+  .rank { font-size:12px; font-weight:700; color:var(--red); }
+  .cost { font-size:12px; color:var(--mute); margin-top:4px; }
+  .agentsaid { background:#f3f4f6; border-radius:10px; padding:6px 8px; font-size:13px; margin-top:6px; }
 </style>
 </head>
 <body>
@@ -82,7 +97,7 @@
 </div>
 <nav>
   <button id="nav-search" class="on">🔍<br>Search</button>
-  <button id="nav-list">⭐<br>Short list &amp; agents <span id="navcount"></span></button>
+  <button id="nav-list">⭐<br>My short list <span id="navcount"></span></button>
   <button id="nav-about">ℹ️<br>How it works</button>
 </nav>
 <div class="sheet-bg" id="bg"></div>

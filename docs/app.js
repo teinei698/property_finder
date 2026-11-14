@@ -24,7 +24,12 @@
 
   // ---------------- the brief: tappable choices only ----------------
   const BEDS = { k: 'beds', ask: 'How many bedrooms?', opts: [['1', '1 bed'], ['2', '2 beds'], ['4', '4 beds']], skip: () => S.beds !== 'all' };
-  const DELEGATE = { k: 'delegate', ask: 'Shall I message the agents for you? I only ask about availability, the real price and the unit number, and I never share your budget.', opts: [['yes', 'Yes, ask them'], ['no', 'Not yet, just show me']] };
+  const DELEGATE = { k: 'delegate', ask: 'Shall I send your questions to the agents now? I never share your budget or your other flats.', opts: [['yes', 'Yes, send them'], ['no', 'Not yet, just show me']] };
+  const RULES_OPT = ['rules', 'Plus what my checks flag (⚖️ recommended)'];
+  const ASKS = {
+    R: { k: 'asks', multi: true, defaults: ['avail', 'cheques', 'viewing', 'rules'], ask: 'Which questions should I ask the agents? I pre-selected the usual ones; tap to change.', opts: [['avail', 'Still available?'], ['cheques', 'Real price for my cheques + fees'], ['viewing', 'Can I view this week?'], ['unit', 'Unit number / floor'], ['furnish', 'Furnished or not?'], ['permit', 'Permit number'], RULES_OPT] },
+    S: { k: 'asks', multi: true, defaults: ['avail', 'vacant', 'viewing', 'rules'], ask: 'Which questions should I ask the agents? I pre-selected the usual ones; tap to change.', opts: [['avail', 'Still available?'], ['vacant', 'Vacant on transfer?'], ['viewing', 'Can I view this week?'], ['unit', 'Unit number / floor'], ['nego', 'Is the price negotiable?'], ['permit', 'Permit number'], RULES_OPT] },
+  };
   const Q = {
     R: [BEDS,
       { k: 'budget', ask: 'What is your top budget per year?', opts: [[80000, 'AED 80k'], [100000, '100k'], [150000, '150k'], [200000, '200k'], [300000, '300k'], [450000, '450k']] },
@@ -32,13 +37,13 @@
       { k: 'movein', ask: 'When do you need to move in?', opts: [[7, 'Now'], [30, 'Within a month'], [90, 'Within 3 months']] },
       { k: 'furnish', ask: 'Furnished or unfurnished?', opts: [['YES', 'Furnished'], ['NO', 'Unfurnished'], ['ANY', 'Either']] },
       { k: 'prio', multi: true, ask: 'What matters most to you? Pick any.', opts: [['view', 'Sea or Palm view'], ['cost', 'Lowest total cost'], ['now', 'Ready to move in']] },
-      DELEGATE],
+      ASKS.R, DELEGATE],
     S: [BEDS,
       { k: 'budget', ask: 'What is your top budget?', opts: [[1300000, 'AED 1.3M'], [1600000, '1.6M'], [2000000, '2M'], [2500000, '2.5M'], [5000000, '5M']] },
       { k: 'purpose', ask: 'Are you buying to live in or to rent out?', opts: [['live', 'To live in'], ['invest', 'To rent out']] },
       { k: 'vacant', ask: 'Does it need to be vacant on transfer?', opts: [['yes', 'Yes, vacant'], ['no', 'Tenanted is fine']] },
       { k: 'prio', multi: true, ask: 'What matters most to you? Pick any.', opts: [['view', 'Sea or Palm view'], ['cost', 'Lowest price'], ['yield', 'Rental income']] },
-      DELEGATE],
+      ASKS.S, DELEGATE],
   };
   const questions = () => Q[M()].filter(q => !(q.skip && q.skip()));
   const nextQ = () => questions().find(q => B()[q.k] === undefined);
@@ -68,7 +73,7 @@
       }
     }
     if ((b.prio || []).includes('view') && hasView(l)) out.chips.push(['y', 'View in the title']);
-    if (l.c === 'S' && l.audit.dual && b.purpose === 'invest') out.chips.push(['y', 'Already listed for rent: rental income visible']);
+    if (l.c === 'S' && l.audit.dual && b.purpose === 'invest') { const r = byId[l.audit.dual]; out.chips.push(['y', `Same flat listed for rent at AED ${kfmt(r.price)}/yr: ~${(r.price / l.price * 100).toFixed(1)}% gross yield`]); }
     return out;
   }
   function score(l, d, fit) {
@@ -113,20 +118,32 @@
   }
 
   // ---------------- Scout's delegation (simulated agents) ----------------
-  function personalQs(l, d) {
-    const b = B(), qs = [...d.questions];
-    if (l.c === 'R' && b.movein) qs.unshift(`Can I move in by ${addDays(b.movein)}?`);
-    if (l.c === 'R' && !qs.some(q => /cheques/.test(q))) qs.push(`What is the total for ${cheques()} cheques, plus deposit and agency fee?`);
-    if (l.c === 'S' && b.vacant === 'yes' && !qs.some(q => /vacant/i.test(q))) qs.push('Is it vacant on transfer?');
-    return [...new Set(qs)].slice(0, 4);
+  function qText(t, l) {
+    const b = B();
+    return { avail: l.c === 'R' && b.movein ? `Is it still available, and can I move in by ${addDays(b.movein)}?` : 'Is it still available?',
+      cheques: `What is the total for ${cheques()} cheques, plus deposit and agency fee?`, viewing: 'Could we view it this week?',
+      unit: 'What is the unit number, or at least the floor?', furnish: 'Is it furnished, partly furnished or unfurnished?',
+      permit: 'Can you share the DLD permit number for this ad?', vacant: 'Is it vacant on transfer?', nego: 'Is the price negotiable?' }[t];
   }
+  // [{ q, why }]: why = 'you' (picked in the brief) or a rule ID (added by Scout's checks)
+  function candidateQs(l, d) {
+    const asks = B().asks || (ASKS[l.c].defaults);
+    const out = asks.filter(t => t !== 'rules').map(t => ({ q: qText(t, l), why: 'you', t }));
+    if (asks.includes('rules')) d.questions.forEach(q => {
+      const t = window.qTypeOf(q);
+      if (!out.some(x => window.qTypeOf(x.q) === t)) out.push({ q, why: d.qrule[q] || 'U1' });
+    });
+    return out;
+  }
+  const personalQs = (l, d) => candidateQs(l, d).map(x => x.q);
   function logLine(text, mode = M()) { P.log[mode].push(text); save(); }
   function askAgent(l, qs, delay) {
     P.threads[l.id] = { questions: qs, reply: null }; save();
     setTimeout(() => {
-      const r = window.AGENT_REPLIES[l.id] || window.defaultReply(l);
+      const r = window.makeReply(l, qs, cheques());
+      const sc = window.AGENT_REPLIES[l.id]; if (sc && sc.personal) { r.personal = sc.personal; r.personalWhy = sc.personalWhy; }
       P.threads[l.id].reply = r; save();
-      logLine(`<b>${l.broker}</b> replied about the ${l.beds}-bed at AED ${kfmt(realPrice(l, cheques()))}: ${r.summary}`, l.c);
+      logLine(`<b>${l.broker}</b> replied about the ${l.beds}-bed at AED ${kfmt(realPrice(l, cheques()))}: ✅ ${r.answered.length} answered${r.pending.length ? ', ⏳ ' + r.pending.length + ' to confirm' : ''}.`, l.c);
       render();
     }, delay);
   }
@@ -138,10 +155,10 @@
       const ag = new Set(ms.map(m => m.broker)).size;
       if (R.result === 'confirmed') {
         const lead = leadOf(ms, cheques());
-        P.threads[lead.id] = { questions: ['What is the unit number, or at least the floor?'], reply: { outcome: 'confirmed', text: (R.perAd || {})[lead.id] || 'Same unit.', summary: `Same flat confirmed by ${ms.length} ads from ${ag} agencies (${R.unit}). Cheapest verified: AED ${fmt(price(lead))} via ${lead.broker} (R3, R4).` } };
+        P.threads[lead.id] = { questions: ['What is the unit number, or at least the floor?'], reply: { outcome: 'confirmed', scripted: true, text: ms.map(m => `${m.broker}: ${(R.perAd || {})[m.id] || ''}`).join(' / '), answered: [{ q: 'What is the unit number, or at least the floor?', a: `all ${ms.length} ads gave the same unit (${R.unit}): one flat, cheapest verified AED ${fmt(price(lead))} via ${lead.broker} (R3, R4)` }], pending: [], summary: `Same flat confirmed by ${ms.length} ads from ${ag} agencies (${R.unit}). Cheapest verified: AED ${fmt(price(lead))} via ${lead.broker} (R3, R4).` } };
         logLine(`${ms.length} ads from ${ag} agencies gave the same unit (${R.unit}): <b>one flat</b>. I kept the cheapest verified ad, AED ${kfmt(price(lead))} (R3, R4).`, ms[0].c);
       } else if (R.result === 'split') {
-        ms.forEach(m => { P.threads[m.id] = { questions: ['What is the unit number, or at least the floor?'], reply: { outcome: 'confirmed', text: R.perAd[m.id], summary: 'Its own flat: ' + R.perAd[m.id] } }; });
+        ms.forEach(m => { P.threads[m.id] = { questions: ['What is the unit number, or at least the floor?'], reply: { outcome: 'confirmed', scripted: true, text: R.perAd[m.id], answered: [{ q: 'What is the unit number, or at least the floor?', a: 'a different unit from the other ad: two flats with the same layout, photos reused' }], pending: [], summary: 'Its own flat: ' + R.perAd[m.id] } }; });
         logLine(`${ms.length} ads shared photos, but the agent says they are <b>different flats</b> with the same layout. I show them separately. (Rule R1 alone would have been wrong.)`, ms[0].c);
       } else logLine(`No reply about the ${ms.length} ads that look like one flat. They stay visible but move down (U2).`, ms[0].c);
       save(); render();
@@ -186,6 +203,7 @@
       h += `<div class="say">${q.ask}</div><div class="you">${label(q, v)}</div>`;
     });
     const q = nextQ();
+    if (q && q.multi && S.pickFor !== q.k) { S.picks = [...(q.defaults || [])]; S.pickFor = q.k; }
     if (q) {
       h += `<div class="say">${q.ask}</div><div class="chips">${q.opts.map(o => `<span class="opt ${q.multi && S.picks.includes(o[0]) ? 'sel' : ''}" data-ans="${o[0]}">${o[1]}</span>`).join('')}${q.multi ? '<span class="opt go" data-done="1">Done</span>' : ''}</div>`;
     }
@@ -202,6 +220,10 @@
     const d = document.querySelector('[data-done]'); if (d) d.onclick = () => { B()[q.k] = S.picks; S.picks = []; save(); if (!nextQ()) work(); else render(); };
   }
 
+  function breakdownHtml(r) {
+    if (!r.answered) return `<div class="agentsaid"><b>Agent:</b> ${r.summary}</div>`;
+    return `<div class="agentsaid"><b>💬 Agent wrote:</b> "${r.text}"</div><div class="ai"><b>🤖 AI breakdown</b>${r.answered.length ? `<ul>${r.answered.map(x => `<li>✅ ${x.a}</li>`).join('')}</ul>` : ''}${r.pending.length ? `<ul>${r.pending.map(q => `<li>⏳ Not answered yet: "${q}". Scout will follow up (U1).</li>`).join('')}</ul>` : ''}<div class="muted">${r.scripted ? 'Scripted scenario event: not something the ad can tell.' : 'Simulated agent: answers only with what the real ad states.'}</div></div>`;
+  }
   function costLine(l) {
     const p = price(l);
     if (l.c === 'R') {
@@ -231,7 +253,7 @@
       <div class="meta">${l.beds} bed · ${fmt(l.sqft)} sqft · ${f.kind === 'group' ? ag + ' agencies' : l.broker}</div>
       <div>${f.fit.chips.map(c => `<span class="fit ${c[0]}">${c[1]}</span>`).join('')}${personal}</div>
       <div>${trust.map(c => `<span class="fit ${c[0]}">${c[1]}</span>`).join('')}</div>
-      ${r ? `<div class="agentsaid"><b>Agent:</b> ${r.summary}</div>` : ''}
+      ${r ? breakdownHtml(r) : ''}
       ${issues.length ? `<ul class="why">${issues.map(x => `<li><span class="rid">${x.rule}</span>${x.text}</li>`).join('')}</ul>` : ''}
       ${f.kind !== 'group' ? `<div class="cost">${costLine(l)}</div>` : ''}
       ${P.viewing[l.id] ? `<div class="fit y">Viewing requested: ${P.viewing[l.id]}</div>` : ''}
@@ -259,7 +281,14 @@
       ev.stopPropagation();
       const id = e.dataset.id, l = byId[id], panel = document.querySelector(`[data-panel="${id}"]`);
       const act = e.dataset.act;
-      if (act === 'ask') { askAgent(l, personalQs(l, ev2(l)), 1600); logLine(`Asking <b>${l.broker}</b> about the ${l.beds}-bed at AED ${kfmt(price(l))}.`); render(); }
+      if (act === 'ask') {
+        const cq = candidateQs(l, ev2(l)); let sel = cq.map((x, i) => i);
+        const draw = () => { panel.innerHTML = `<div class="say">Which questions should I send to ${l.agent}?</div><div class="chips">${cq.map((x, i) => `<span class="opt ${sel.includes(i) ? 'sel' : ''}" data-qi="${i}">${x.q}${x.why === 'you' ? '' : ' <span class="rid" style="color:inherit">⚖️ ' + x.why + '</span>'}</span>`).join('')}<span class="opt go" data-send="1">Send ${sel.length}</span></div><div class="muted">⚖️ = added because a rule flagged this ad. Your budget is never shared (A3).</div>`;
+          panel.querySelectorAll('[data-qi]').forEach(c => c.onclick = e2 => { e2.stopPropagation(); const i = +c.dataset.qi; sel = sel.includes(i) ? sel.filter(x => x !== i) : [...sel, i]; draw(); });
+          panel.querySelector('[data-send]').onclick = e2 => { e2.stopPropagation(); if (!sel.length) return; askAgent(l, sel.map(i => cq[i].q), 1600); logLine(`Asking <b>${l.broker}</b> ${sel.length} question${sel.length > 1 ? 's' : ''} about the ${l.beds}-bed at AED ${kfmt(price(l))}.`); render(); };
+        };
+        draw();
+      }
       if (act === 'group') { const ms = L.filter(x => x.audit.dupGroup === e.dataset.k && x.c === M()); askGroup(e.dataset.k, ms, 1800); logLine(`Asking ${new Set(ms.map(m => m.broker)).size} agencies for the unit number of the flat they all advertise.`); render(); }
       if (act === 'view') panel.innerHTML = `<div class="say">When suits you?</div><div class="chips">${['Tomorrow after 6pm', 'Saturday morning', 'Saturday afternoon', 'Sunday any time'].map(s => `<span class="opt" data-slot="${s}">${s}</span>`).join('')}</div>`;
       if (act === 'more') panel.innerHTML = `<div class="say">What else should I ask?</div><div class="chips">${MORE[l.c].map((x, i) => `<span class="opt" data-more="${i}">${x[0]}</span>`).join('')}</div>`;
@@ -327,16 +356,48 @@
   function closeSheet() { $('#sheet').style.display = 'none'; $('#bg').style.display = 'none'; }
   $('#bg').onclick = closeSheet;
   function openListing(id) {
-    const l = byId[id], d = ev(l), t = P.threads[id];
+    const l = byId[id], d = ev(l), t = P.threads[id], a = l.audit;
+    const F = (window.AD_FACTS || {})[id] || {}, T = (window.PHOTO_TAGS || {})[id], meta = window.PHOTO_TAGS_META;
     const statusTxt = { short: '<span style="color:var(--ok)">passes every check (S1)</span>', ask: '<span style="color:var(--warn)">needs answers from the agent (U1)</span>', hidden: '<span style="color:var(--bad)">likely bait, set aside</span>', notyearly: '<span style="color:var(--bad)">not a standard yearly lease</span>' }[d.status];
+    const line = x => `<div class="srcline">${x}</div>`;
+    // 📊 portal data
+    let data = [`Advertised AED ${fmt(l.price)}${l.c === 'R' ? '/year' + (l.cheques ? ' in ' + l.cheques + ' cheque' + (l.cheques > 1 ? 's' : '') : '') : ''}; listed ${l.listed}${l.c === 'R' ? '; "available from" ' + l.avail : ''}`,
+      (l.permit ? '✓ DLD permit QR on the ad' : '✗ No DLD permit shown') + ' · ' + (l.verified ? '✓ Verified listing' : '✗ Not verified'),
+      d.comparable ? `Median of ${l.n} live ads, same tower and plan: AED ${fmt(l.median)} → this ad ${window.Rules.pct(d.dev)}` : `Only ${l.n} comparable ads: price not compared (P1)`,
+      `Furnishing field: ${{ YES: 'furnished', NO: 'unfurnished', PARTLY: 'partly furnished' }[l.furnished]}`];
+    if (l.paid) data.push('Paid placement: ' + l.paid);
+    // 📝 AI read the ad
+    let text = [];
+    if (F.floor || F.view) text.push(`Ad states: ${[F.floor, F.view].filter(Boolean).join(', ')}`);
+    if (a.priceReason) text.push('Price reason stated: ' + a.priceReason.toLowerCase());
+    if (a.chequePrices) text.push('Text gives prices per cheque count: ' + Object.entries(a.chequePrices).map(([c, p]) => `AED ${fmt(p)} for ${c}`).join(', ') + ' (the headline is the 1-cheque price)');
+    if (a.conditionalPrice) text.push('Condition on the price: ' + a.conditionalPrice);
+    if (a.genericUnit) text.push(a.genericUnit);
+    if (a.switchText) text.push(a.switchText);
+    if (a.feesStated) text.push('Fees stated: ' + a.feesStated);
+    (a.contradictions || []).filter(c => !/photos/i.test(c)).forEach(c => text.push('Contradiction: ' + c));
+    if (a.dual) text.push(`The same flat is also listed for ${l.c === 'R' ? 'sale' : 'rent'} (<a href="${byId[a.dual].url}" target="_blank" rel="noopener">other ad</a>, AED ${fmt(byId[a.dual].price)})`);
+    if (!text.length) text.push('Nothing notable in the text');
+    // 📷 AI looked at the photos
+    let pics = [];
+    if (T) {
+      const fieldF = { YES: 'yes', NO: 'no', PARTLY: 'partly' }[l.furnished];
+      pics.push(`Furnished: <b>${T.furnished || 'not visible'}</b>${T.furnished && fieldF !== 'partly' && T.furnished !== fieldF ? ` → <span style="color:var(--warn)">contradicts the "${{ yes: 'furnished', no: 'unfurnished' }[fieldF]}" field</span>` : ''}`);
+      pics.push(`Kitchen: ${T.kitchen || 'not seen'} · Balconies seen: ${T.balcony === null ? 'none in these photos (not the same as 0)' : T.balcony + ' (same balcony from several angles counted once)'} · View: ${T.view || 'not seen'}`);
+      if (T.interior === false) pics.push('<span style="color:var(--warn)">First photos show only views, no rooms</span>');
+      if (T.sameRoom) { const twins = Object.entries(window.PHOTO_TAGS).filter(([k, v]) => v.sameRoom === T.sameRoom && k !== id); pics.push(`Same room as: ${twins.map(([k]) => `<a href="${byId[k].url}" target="_blank" rel="noopener">${byId[k].broker} (${byId[k].c === 'R' ? 'rent' : 'sale'}, AED ${kfmt(byId[k].price)})</a>`).join(', ')}`); }
+      pics.push(`<span class="muted">Seen: ${T.seen}</span>`);
+    }
     let h = `<img src="${l.img}" alt="" onerror="this.style.display='none'"><div class="pad">
       <div class="price">AED ${fmt(price(l))}${l.c === 'R' ? ' /year' : ''}</div>
-      <div class="meta">${l.title}</div><div class="meta">${l.beds} bed · ${fmt(l.sqft)} sqft · listed ${l.listed} · ${l.broker} (${l.agent})</div>
-      <div class="box" style="background:#f9fafb;border:1px solid var(--line)"><h4>🛡️ Scout's check: ${statusTxt}</h4>
-      ${d.ok.length ? `<ul>${d.ok.map(p => `<li>✓ ${p}</li>`).join('')}</ul>` : ''}
-      ${d.flags.length ? `<ul style="margin-top:6px">${d.flags.map(f => `<li><span class="rid">${f.rule} · ${RULE_NAME[f.rule] || ''}</span><br>${f.text}</li>`).join('')}</ul>` : ''}
-      ${d.comparable ? `<div class="muted" style="margin-top:6px">Compared with ${l.n} live ads in this tower with the same plan (median AED ${fmt(l.median)}).</div>` : ''}</div>`;
-    if (t) h += `<div class="box" style="background:#fff;border:1px solid var(--line)"><h4>Scout ↔ ${l.agent} (${l.broker})</h4><div class="bubble me">Hi, for a client, about your ad ${l.id}:<br>${t.questions.map(q => '• ' + q).join('<br>')}</div>${t.reply ? (t.reply.text ? `<div class="bubble them">${t.reply.text}</div>` : '') + `<div class="bubble scout"><b>Scout:</b> ${t.reply.summary}</div>` : '<div class="muted">⏳ Waiting for the agent… (simulated)</div>'}</div>`;
+      <div class="meta">${l.title}</div><div class="meta">${l.beds} bed · ${fmt(l.sqft)} sqft · ${l.broker} (${l.agent})</div>
+      <div class="box" style="background:#f9fafb;border:1px solid var(--line)"><h4>Why Scout ${d.status === 'short' ? 'trusts this' : 'is careful here'}: ${statusTxt}</h4>
+      <div class="src">📊 Portal data</div>${data.map(line).join('')}
+      <div class="src">📝 AI read the ad <span class="muted">(Claude, 14 Nov)</span></div>${text.map(line).join('')}
+      <div class="src">📷 AI looked at the photos <span class="muted">(${meta.source}, ${meta.photos}, ${meta.date}, not live)</span></div>${pics.map(line).join('')}
+      <div class="src">⚖️ Rules decided</div>${d.flags.length ? d.flags.map(f => line(`<span class="rid">${f.rule} · ${RULE_NAME[f.rule] || ''}</span> ${f.text}`)).join('') : line('<span class="rid">S1</span> no rule raised a doubt')}
+      </div>`;
+    if (t) h += `<div class="box" style="background:#fff;border:1px solid var(--line)"><div class="src">💬 Scout ↔ ${l.agent} (${l.broker})</div><div class="bubble me">${t.questions.map(q => '• ' + q).join('<br>')}</div>${t.reply ? breakdownHtml(t.reply) : '<div class="muted">⏳ Waiting for the agent… (simulated)</div>'}</div>`;
     h += `<div class="grid2"><a class="btn ghost small" style="text-align:center;text-decoration:none" href="${l.url}" target="_blank" rel="noopener">Open the real listing</a><button class="btn ghost small" id="call">Call agent myself</button></div><div class="note" style="margin:8px 0 0">Call directly if you want to view today or already know this agent.</div></div>`;
     openSheet(h);
     $('#call').onclick = () => alert('In the real app this opens Call / WhatsApp, exactly as today.');
@@ -388,8 +449,8 @@
   function reset() { P = fresh(); save(); S.tab = 'search'; S.beds = 'all'; render(); }
 
   // personalised outcomes for buyer scenario 3 (same reply, different person)
-  if (window.AGENT_REPLIES['152823022']) Object.assign(window.AGENT_REPLIES['152823022'], { personal: { 'live-yes': 'drop', 'invest-no': 'keep', 'invest-yes': 'drop', 'live-no': 'keep' }, personalWhy: 'Tenanted until Mar 2027 at AED 120,000/yr: ~6.7% gross income for an investor, but not vacant for you' });
-  if (window.AGENT_REPLIES['152354372']) Object.assign(window.AGENT_REPLIES['152354372'], { personal: { 'invest-no': 'keep', 'invest-yes': 'keep', 'live-yes': 'keep', 'live-no': 'keep' }, personalWhy: 'Rent ad for the same flat: AED 75,000/yr, ~6.25% gross yield' });
+  if (window.AGENT_REPLIES['152823022']) Object.assign(window.AGENT_REPLIES['152823022'], { personal: { 'live-yes': 'drop', 'invest-no': 'keep', 'invest-yes': 'drop', 'live-no': 'keep' }, personalWhy: 'Tenanted until Mar 2027 at AED 120,000/yr (scripted scenario reply): income for an investor, but not vacant for you' });
+
 
   function render() {
     document.querySelectorAll('[data-mode]').forEach(e => e.classList.toggle('on', e.dataset.mode === S.mode));

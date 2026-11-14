@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scout short list: prototype (desktop view)</title>
+<style>
+  body { margin:0; font:15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color:#1d1d1f; background:#eef0f3; }
+  .wrap { max-width:1100px; margin:0 auto; padding:32px 24px; display:flex; gap:48px; align-items:flex-start; flex-wrap:wrap; justify-content:center; }
+  .phone { width:390px; height:844px; border:12px solid #111; border-radius:44px; overflow:hidden; background:#fff; box-shadow:0 20px 50px rgba(0,0,0,.25); flex:none; }
+  .phone iframe { width:100%; height:100%; border:0; }
+  .side { max-width:520px; }
+  h1 { font-size:26px; margin:8px 0; } h2 { font-size:17px; margin:22px 0 6px; }
+  .tag { display:inline-block; font-size:12px; font-weight:600; color:#6b7280; border:1px solid #d1d5db; border-radius:10px; padding:2px 8px; }
+  ol, ul { padding-left:20px; } li { margin:4px 0; }
+  a { color:#1d4ed8; }
+  .muted { color:#6b7280; font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="phone"><iframe src="index.html" title="Scout prototype"></iframe></div>
+  <div class="side">
+    <span class="tag">Prototype · not affiliated with Property Finder</span>
+    <h1>Scout: a short list you can trust</h1>
+    <p>A personal assistant inside Property Finder search. You tap a few answers; Scout removes likely bait, merges copies of the same flat, asks agents your questions, and gives you a short list with the real price. The agent stays in the deal.</p>
+    <h2>Try it (in the phone on the left)</h2>
+    <ol>
+      <li>Tap <b>Build my short list</b> and answer by tapping.</li>
+      <li>Pick the questions Scout should send to agents.</li>
+      <li>Open <b>Why Scout trusts this</b> on any flat: every fact shows its source (portal data, AI reading the ad, AI looking at the photos, rules).</li>
+      <li>Or open <b>How it works</b> (bottom right) and run one of 4 real cases.</li>
+    </ol>
+    <h2>Real and simulated</h2>
+    <ul>
+      <li><b>Real:</b> 38 live listings from Elite Residence, Dubai Marina (14 Nov 2026), compared with all 442 live ads in the tower.</li>
+      <li><b>AI, not live:</b> photo tags from Claude's visual check of the first 3 photos of each listing.</li>
+      <li><b>Simulated:</b> agent replies. They use only what each real ad states, and mark the rest "to confirm".</li>
+    </ul>
+    <p class="muted">Best on a phone: open <a href="index.html">the mobile version</a> directly.</p>
+  </div>
+</div>
+</body>
+</html>

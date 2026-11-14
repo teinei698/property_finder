@@ -26,8 +26,8 @@
   function evaluate(l, prefs) {
     const today = window.TODAY;
     const a = l.audit;
-    const d = { id: l.id, flags: [], questions: [], ok: [] };
-    const issue = (rule, text, q) => { d.flags.push({ rule, text, kind: 'issue' }); if (q && !d.questions.includes(q)) d.questions.push(q); };
+    const d = { id: l.id, flags: [], questions: [], ok: [], qrule: {} };
+    const issue = (rule, text, q) => { d.flags.push({ rule, text, kind: 'issue' }); if (q && !d.questions.includes(q)) { d.questions.push(q); d.qrule[q] = rule; } };
     const info = (rule, text) => d.flags.push({ rule, text, kind: 'info' });
 
     const rp = realPrice(l, prefs.cheques);
@@ -73,7 +73,7 @@
     if (!l.verified) issue('L5', 'Not a verified listing', 'Is it still available at this price?');
     if (a.genericUnit) issue('B2', a.genericUnit, 'What is the unit number, or at least the floor?');
     if (l.c === 'R' && !l.cheques && !(a.chequePrices && a.chequePrices[prefs.cheques])) issue('P2', 'Number of cheques not stated', `What is the total for ${prefs.cheques} cheques, plus deposit and agency fee?`);
-    if (a.dual && l.c === 'R') { info('R9', 'The same flat is also listed for sale (dual listing, not a copy)'); d.questions.push('The owner also lists this flat for sale. Is it being sold, and is a 12-month lease still fine?'); }
+    if (a.dual && l.c === 'R') { info('R9', 'The same flat is also listed for sale (dual listing, not a copy)'); const q = 'The owner also lists this flat for sale. Is it being sold, and is a 12-month lease still fine?'; d.questions.push(q); d.qrule[q] = 'R9'; }
     if (a.dual && l.c === 'S') info('R9', 'The same flat is also listed for rent (dual listing, not a copy). Useful to a buyer: it shows the rent it can earn');
     if (a.saleSameRoomAs) info('R2', 'Photos show the same room as 4 rent ads from 4 agencies (Unit B)');
     if (a.paidTwice) info('B4', 'This ad appears twice on the results page (paid slot + organic). Shown once here');
